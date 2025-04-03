@@ -109,6 +109,8 @@ Para la recolección de datos, necesitarás implementar conectores para cada una
 
 El pipeline ETL (Extract, Transform, Load) se encargará de procesar los datos crudos obtenidos de las diferentes fuentes:
 
+<https://github.com/No-Country-simulation/LuRoCaMaJo_express_proyect/blob/Directo-de-IA/etl-pipeline.py>
+
 He completado el pipeline ETL para el análisis de tendencias en belleza. La implementación incluye:
 
 1. **Métodos de extracción**:
@@ -172,6 +174,8 @@ Con estos componentes, ya tienes las piezas fundamentales para completar tu sist
    - Crear guías de usuario para el dashboard
 
 He creado el archivo `import_requests.py` completo, que implementa una clase `BeautyTrendsDataCollector` para recolectar datos de diferentes fuentes relacionadas con tendencias de belleza. Este script:
+
+<https://github.com/No-Country-simulation/LuRoCaMaJo_express_proyect/blob/Directo-de-IA/full-import-requests.py>
 
 1. Recolecta datos de la API de TikTok, incluyendo:
    - Hashtags de tendencia relacionados con categorías de belleza
