@@ -1,0 +1,30 @@
+flowchart TB
+    subgraph Fuentes["Fuentes de Datos"]
+        TikTok["TikTok Insights API"]
+        Ecom["APIs de E-Commerce"]
+        Google["Google Trends API"]
+        Social["Redes Sociales API"]
+    end
+
+    subgraph Procesamiento["Procesamiento de Datos"]
+        ETL["Extracción, Transformación y Carga"]
+        Cleaning["Limpieza de Datos"]
+        Feature["Ingeniería de Características"]
+        Storage["Almacenamiento (Cloud Storage)"]
+    end
+
+    subgraph Analisis["Análisis y Predicción"]
+        ML["Modelos ML (Scikit-learn)"]
+        DL["Modelos DL (TensorFlow.js)"]
+        Trends["Análisis de Tendencias"]
+    end
+
+    subgraph Frontend["Interfaz de Usuario"]
+        API["FastAPI"]
+        Dashboard["Dashboard Interactivo (Streamlit/Dash)"]
+        Viz["Visualizaciones (Plotly)"]
+    end
+
+    Fuentes --> Procesamiento
+    Procesamiento --> Analisis
+    Analisis --> Frontend
