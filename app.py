@@ -309,43 +309,7 @@ def get_trend_evolution(top_keywords: int = 5):
     
     return result
 
-    """Obtener la evolución de tendencias para las top palabras clave"""
-    conn = sqlite3.connect('trends.db')
-    cursor = conn.cursor()
-    
-    # Obtener las top keywords
-    cursor.execute("""
-        SELECT keyword 
-        FROM keyword_rankings 
-        ORDER BY count DESC, last_date DESC, last_time DESC 
-        LIMIT ?
-    """, (top_keywords,))
-    
-    top_keywords_list = [row[0] for row in cursor.fetchall()]
-    
-    # Inicializar como lista vacía
-    result = []
-    
-    # Para cada keyword, obtener su evolución en el tiempo
-    for keyword in top_keywords_list:
-        cursor.execute("""
-            SELECT capture_date, COUNT(*) as daily_count 
-            FROM keywords_data 
-            WHERE keyword = ? 
-            GROUP BY capture_date 
-            ORDER BY capture_date
-        """, (keyword,))
-        
-        for row in cursor.fetchall():
-            result.append({
-                "keyword": keyword,
-                "date": row[0],
-                "count": row[1]
-            })
-    
-    conn.close()
-    
-    return result
+   
 @app.get("/top-keywords-list")
 def get_top_keywords_list(limit: int = 20):
     """Obtener listado de top keywords con número de repeticiones"""
@@ -422,27 +386,7 @@ def get_capture_history(limit_captures: int = 10):
     
     return result
 
-    """Obtener el histórico de capturas de datos con las palabras clave"""
-    conn = sqlite3.connect('trends.db')
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT capture_date, capture_time, keyword 
-        FROM keywords_data 
-        ORDER BY capture_date DESC, capture_time DESC
-        LIMIT 20
-    """)
-    
-    result = [{"date": row[0], "time": row[1], "keyword": row[2]} for row in cursor.fetchall()]
-    conn.close()
-    
-    return result
 
-# Rutas para escalabilidad futura  PROPHETTTTTTTTTTTT
-
- # Corrige la indentación del método get_prophet_forecast
-# Actualmente está indentado incorrectamente
-# Debe estar al mismo nivel que los otros endpoints
 
 @app.get("/prophet-forecast")
 def get_prophet_forecast(keyword: str = None, forecast_days: int = 7):
