@@ -590,7 +590,7 @@ def main():
                 height=200, 
                 title="Vista previa de la predicción",
                 xaxis_title="Fecha",
-                yaxis_title="Búsquedas previstas",
+                yaxis_title="Previstas",
                 showlegend=False,
                 margin=dict(l=20, r=20, t=40, b=20)
             )
