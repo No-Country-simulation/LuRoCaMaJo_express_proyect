@@ -3,7 +3,8 @@ import requests
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime
+from datetime import datetime, timedelta
+
 import time
 
 # Configuración de la página
@@ -415,6 +416,11 @@ def main():
             color: #333333;  /* Texto gris oscuro para legibilidad */
             border: none;
         }
+        .prediction-card {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);        
         </style>
     """, unsafe_allow_html=True)
 
@@ -525,6 +531,192 @@ def main():
             download_comparison_data(data)
     else:
         st.info("Selecciona al menos una palabra clave para comparar.")
+    
+    # Dentro de main(), después de "Comparación de Predicciones"
+    st.subheader("Predicción de Tendencias Personalizada")
+    st.markdown("<h2 class='sub-header'>Predicción de Tendencias</h2>", unsafe_allow_html=True)
+
+    # Obtener categorías desde la API
+    category_data = get_category_distribution()
+    categories = [item["category"] for item in category_data] if category_data else ["N/A"]
+
+    # Formulario para la predicción
+    with st.form("prediction_form"):
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            pred_category = st.selectbox(
+                "Categoría de Producto",
+                options=sorted(categories),
+                format_func=lambda x: x.capitalize()
+            )
+        
+        with col2:
+            keyword_options = [kw["keyword"] for kw in get_top_keywords(limit=10)]
+            pred_keyword = st.selectbox(
+                "Palabra Clave",
+                options=sorted(keyword_options),
+                format_func=lambda x: x.capitalize()
+            )
+        
+        with col3:
+            pred_horizon = st.slider(
+                "Horizonte de Predicción (días)",
+                min_value=7,
+                max_value=90,
+                value=30
+            )
+        
+        predict_button = st.form_submit_button("Predecir Tendencia")
+
+    # Vista previa en tiempo real del gráfico Prophet (Mejora 1)
+    if pred_keyword and pred_category:
+        forecast_data = get_prophet_forecast(keyword=pred_keyword)
+        if forecast_data.get("status") != "error":
+            forecast_df = pd.DataFrame(forecast_data["forecast_data"])
+            forecast_df['date'] = pd.to_datetime(forecast_df['date'])
+            future_date = datetime.now() + timedelta(days=pred_horizon)
+            preview_df = forecast_df[forecast_df['date'] <= future_date]
+            
+            fig_preview = go.Figure()
+            fig_preview.add_trace(go.Scatter(
+                x=preview_df['date'], 
+                y=preview_df['predicted_count'], 
+                mode='lines', 
+                name='Tendencia prevista',
+                line=dict(color='orange', dash='dash')
+            ))
+            fig_preview.update_layout(
+                height=200, 
+                title="Vista previa de la predicción",
+                xaxis_title="Fecha",
+                yaxis_title="Búsquedas previstas",
+                showlegend=False,
+                margin=dict(l=20, r=20, t=40, b=20)
+            )
+            st.plotly_chart(fig_preview, use_container_width=True)
+
+    # Función para generar la predicción con recomendaciones dinámicas (Mejora 4)
+    def predict_trend(category, keyword, horizon):
+        forecast_data = get_prophet_forecast(keyword=keyword, force_reload=True)
+        trend_evolution_data = get_trend_evolution()
+        category_flow_data = get_category_flow()
+        
+        if forecast_data.get("status") == "error":
+            return {"predictions": [{"trend_score": 0, "confidence": 0, "predicted_at": str(datetime.now()), "valid_until": str(datetime.now())}], "recommendation": "No se pudo generar la predicción."}
+        
+        forecast_df = pd.DataFrame(forecast_data["forecast_data"])
+        forecast_df['date'] = pd.to_datetime(forecast_df['date'])
+        future_date = datetime.now() + timedelta(days=horizon)
+        forecast_subset = forecast_df[forecast_df['date'] <= future_date]
+        
+        if not forecast_subset.empty:
+            trend_score = (forecast_subset['predicted_count'].iloc[-1] / forecast_subset['predicted_count'].iloc[0] - 1) * 100
+            trend_score = min(max(trend_score, 0), 100)
+            confidence = 95
+        else:
+            trend_score, confidence = 0, 0
+        
+        # Recomendación dinámica
+        recommendation = f"Analiza la tendencia de '{keyword}' en la categoría '{category}' para los próximos {horizon} días.\n"
+        trend_evolution_df = pd.DataFrame(trend_evolution_data)
+        if not trend_evolution_df.empty and keyword in trend_evolution_df['keyword'].values:
+            keyword_trend = trend_evolution_df[trend_evolution_df['keyword'] == keyword]
+            recent_count = keyword_trend['count'].iloc[-1]
+            past_count = keyword_trend['count'].iloc[0]
+            growth = (recent_count - past_count) / past_count * 100 if past_count > 0 else 0
+            if growth > 20:
+                recommendation += f"La tendencia histórica muestra un crecimiento del {growth:.1f}%. Considera aumentar inventario.\n"
+            elif growth < -20:
+                recommendation += f"La tendencia histórica indica una caída del {-growth:.1f}%. Evalúa reducir exposición.\n"
+        
+        if category_flow_data.get("status") == "success":
+            nodes = category_flow_data["nodes"]
+            links = category_flow_data["links"]
+            category_idx = nodes.index(category) if category in nodes else -1
+            if category_idx >= 0:
+                related_flows = sum([v for s, t, v in zip(links["source"], links["target"], links["value"]) if s == category_idx or t == category_idx])
+                if related_flows > 5:
+                    recommendation += f"Esta categoría tiene un flujo significativo con otras ({related_flows} transiciones). Explora combinaciones de productos.\n"
+        
+        if trend_score > 75:
+            recommendation += "¡Gran potencial de crecimiento! Aprovecha esta tendencia ahora."
+        elif trend_score > 50:
+            recommendation += "Tendencia estable con oportunidades. Mantén monitoreo."
+        else:
+            recommendation += "Tendencia baja. Considera otras opciones."
+        
+        return {
+            "predictions": [{
+                "trend_score": trend_score,
+                "confidence": confidence,
+                "predicted_at": str(datetime.now()),
+                "valid_until": str(datetime.now() + timedelta(days=horizon))
+            }],
+            "recommendation": recommendation
+        }
+
+    # Mostrar resultados si se hace clic
+    if predict_button:
+        with st.spinner("Realizando predicción..."):
+            prediction_result = predict_trend(pred_category, pred_keyword, pred_horizon)
+            prediction = prediction_result["predictions"][0]
+            recommendation = prediction_result["recommendation"]
+            
+            st.markdown("<div class='prediction-card'>", unsafe_allow_html=True)
+            st.subheader(f"Predicción para '{pred_keyword.capitalize()}' en '{pred_category.capitalize()}'")
+            
+    # Medidor con indicador simple (sin animación)
+            fig = go.Figure()
+
+            fig.add_trace(go.Indicator(
+                mode="gauge+number",
+                value=prediction["trend_score"],
+                title={"text": "Índice de Tendencia"},
+                domain={'x': [0, 1], 'y': [0, 1]},
+                gauge={
+                    'axis': {'range': [0, 100]},
+                    'bar': {'color': "#FF4B8D"},
+                    'steps': [
+                        {'range': [0, 33], 'color': "#FFECF2"},
+                        {'range': [33, 66], 'color': "#FFCFE0"},
+                        {'range': [66, 100], 'color': "#FFADD0"},
+                    ],
+                    'threshold': {
+                        'line': {'color': "red", 'width': 4},
+                        'thickness': 0.75,
+                        'value': 80
+                    }
+                }
+            ))
+
+            fig.update_layout(height=250)
+            st.plotly_chart(fig, use_container_width=True)
+
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Confianza", f"{prediction['confidence']}%")
+                st.text(f"Predicción realizada: {prediction['predicted_at'][:10]}")
+            with col2:
+                if prediction["trend_score"] > 75:
+                    icon = "🚀"
+                    status = "En ascenso"
+                elif prediction["trend_score"] > 50:
+                    icon = "📈"
+                    status = "Estable con potencial"
+                else:
+                    icon = "📉"
+                    status = "En declive"
+                st.metric("Estado", f"{icon} {status}")
+                st.text(f"Válido hasta: {prediction['valid_until'][:10]}")
+            
+            st.markdown("### Recomendación")
+            st.info(recommendation)  # Recomendación dinámica
+            st.markdown("</div>", unsafe_allow_html=True)
+#fin
+    
+    
     # grafico de Staclerrr
     st.header("Flujo entre categorías - Gráfico de Sankey")
 

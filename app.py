@@ -12,9 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import random
 from prophet import Prophet  # Añadir esta importación al inicio de app.py
 # import openai  # lo usaremos más adelante si volvemos a integrar IA
-
 app = FastAPI(title="API de Análisis de Tendencias de Mercado Libre")
-# Justo después de app = FastAPI(...) añade:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Permite cualquier origen
@@ -386,8 +384,6 @@ def get_capture_history(limit_captures: int = 10):
     
     return result
 
-
-
 @app.get("/prophet-forecast")
 def get_prophet_forecast(keyword: str = None, forecast_days: int = 7):
     """Endpoint para análisis de tendencias con Prophet"""
@@ -502,6 +498,7 @@ def get_prophet_forecast_compare(keywords: str = None, forecast_days: int = 7):
 
     # Rutas para escalabilidad futura  PROPHETTTTTTTTTTTT
 @app.get("/category-flow")
+
 def get_category_flow():
     """Endpoint para obtener transiciones entre categorías"""
     conn = sqlite3.connect('trends.db')
