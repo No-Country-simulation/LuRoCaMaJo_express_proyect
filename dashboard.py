@@ -667,30 +667,26 @@ def main():
             st.subheader(f"Predicción para '{pred_keyword.capitalize()}' en '{pred_category.capitalize()}'")
             
     # Medidor con indicador simple (sin animación)
-            fig = go.Figure()
-
-            fig.add_trace(go.Indicator(
+            fig = go.Figure(go.Indicator(
                 mode="gauge+number",
                 value=prediction["trend_score"],
-                title={"text": "Índice de Tendencia"},
-                domain={'x': [0, 1], 'y': [0, 1]},
+                title={'text': "Índice de Tendencia"},
                 gauge={
-                    'axis': {'range': [0, 100]},
+                    'axis': {'range': [0, 100], 'tickwidth': 1},
                     'bar': {'color': "#FF4B8D"},
                     'steps': [
                         {'range': [0, 33], 'color': "#FFECF2"},
                         {'range': [33, 66], 'color': "#FFCFE0"},
-                        {'range': [66, 100], 'color': "#FFADD0"},
+                        {'range': [66, 100], 'color': "#FFADD0"}
                     ],
                     'threshold': {
                         'line': {'color': "red", 'width': 4},
                         'thickness': 0.75,
-                        'value': 80
+                        'value': prediction["trend_score"]
                     }
                 }
             ))
-
-            fig.update_layout(height=250)
+            fig.update_layout(height=400)
             st.plotly_chart(fig, use_container_width=True)
 
             
