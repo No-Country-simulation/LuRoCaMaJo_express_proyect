@@ -124,7 +124,7 @@ Herrería artesanal, testing afilado, y código con garra.
 ## 📬 Contacto
 
 Para dudas, feedback o nuevas ideas:  
-📧 tester.passalia@.com 
+📧 tester.passalia@gmail.com 
 
 ---
 
