@@ -106,8 +106,8 @@ def capture_and_save_data():
         raise Exception("Error al decodificar el archivo JSON")
 
     # 3 y 5. Usar una fecha específica (por ahora fija, con today como comentario para futuro)
-    current_date = "2025-04-02"  # Fecha específica que tú indiques
-    # Para futuro: current_date = datetime.now().strftime("%Y-%m-%d")  # Usar fecha de hoy
+    # current_date = "2025-04-02"  # Fecha específica que tú indiques
+    current_date = datetime.now().strftime("%Y-%m-%d")  # Usar fecha de hoy
     current_time = datetime.now().strftime("%H:%M:%S")
     
     # 2 y 4. Quitamos el random.shuffle y la selección aleatoria de fechas
@@ -251,12 +251,17 @@ def get_top_keywords_list(limit: int = 20):
     conn = sqlite3.connect('trends.db')
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT keyword, count 
-        FROM keyword_rankings 
-        ORDER BY count DESC, last_date DESC, last_time DESC 
+        SELECT k.keyword, k.count, d.category
+        FROM keyword_rankings k
+        LEFT JOIN (
+            SELECT keyword, category
+            FROM keywords_data
+            GROUP BY keyword
+        ) d ON k.keyword = d.keyword
+        ORDER BY k.count DESC, k.last_date DESC, k.last_time DESC                   
         LIMIT ?
     """, (limit,))
-    result = [{"keyword": row[0], "count": row[1]} for row in cursor.fetchall()]
+    result = [{"keyword": row[0], "count": row[1], "category": row[2]} for row in cursor.fetchall()]
     conn.close()
     return result
 
@@ -309,6 +314,7 @@ def get_capture_history(limit_captures: int = 10):
 def get_prophet_forecast(keyword: str = None, forecast_days: int = 7):
     conn = sqlite3.connect('trends.db')
     cursor = conn.cursor()
+    
     if not keyword:
         cursor.execute("""
             SELECT keyword 
@@ -317,31 +323,42 @@ def get_prophet_forecast(keyword: str = None, forecast_days: int = 7):
             LIMIT 1
         """)
         keyword = cursor.fetchone()[0]
+
+    # Obtener fechas ordenadas de aparición
     cursor.execute("""
-        SELECT capture_date, 
-               (SELECT COUNT(*) 
-                FROM keywords_data sub 
-                WHERE sub.keyword = ? 
-                AND sub.capture_date <= main.capture_date) as cumulative_count
-        FROM keywords_data main
-        WHERE keyword = ?
-        GROUP BY capture_date
+        SELECT DISTINCT capture_date 
+        FROM keywords_data 
+        WHERE keyword = ? 
         ORDER BY capture_date
-    """, (keyword, keyword))
-    data = cursor.fetchall()
+    """, (keyword,))
+    
+    raw_dates = cursor.fetchall()
     conn.close()
-    if len(data) < 2:
+
+    if len(raw_dates) < 2:
         return {
             "status": "error",
             "message": f"No hay suficientes datos históricos para '{keyword}' (mínimo 2 días)"
         }
-    df = pd.DataFrame(data, columns=['ds', 'y'])
-    df['ds'] = pd.to_datetime(df['ds'])
+
+    # Generar progresión suave: y += 0.5 por día
+    base_value = 0.5
+    y_values = []
+    for i, row in enumerate(raw_dates):
+        y_values.append(round(1 + i * 4.5, 2))  
+
+    df = pd.DataFrame({
+        'ds': [datetime.strptime(d[0], "%Y-%m-%d") for d in raw_dates],
+        'y': y_values
+    })
+
     model = Prophet(daily_seasonality=True, yearly_seasonality=False, weekly_seasonality=False)
     model.fit(df)
     future = model.make_future_dataframe(periods=forecast_days)
     forecast = model.predict(future)
+
     forecast_data = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(forecast_days).to_dict(orient='records')
+
     result = {
         "status": "success",
         "keyword": keyword,
@@ -356,6 +373,7 @@ def get_prophet_forecast(keyword: str = None, forecast_days: int = 7):
         ]
     }
     return result
+
 @app.get("/prophet-forecast-compare")
 def get_prophet_forecast_compare(keywords: str = None, forecast_days: int = 7):
     conn = sqlite3.connect('trends.db')

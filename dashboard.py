@@ -152,14 +152,15 @@ def render_keywords_table(data):
         st.warning("No hay datos disponibles para mostrar. Intenta actualizar las tendencias.")
         return
     df = pd.DataFrame(data)
-    df.columns = ['Palabra Clave', 'Repeticiones']
+    df.columns = ['Palabra Clave', 'Repeticiones', 'Categoría']
     df['Repeticiones'] = df['Repeticiones'].astype(int)
     st.dataframe(
         df, use_container_width=True,
         column_config={
             "Palabra Clave": st.column_config.TextColumn("Palabra Clave", help="Palabras clave más buscadas en Mercado Libre"),
             "Repeticiones": st.column_config.ProgressColumn("Repeticiones", help="Número de veces que se buscó esta palabra", format="%d", min_value=0, max_value=int(df["Repeticiones"].max())),
-        },
+            "Categoría": st.column_config.TextColumn("Categoría", help="Categoría asignada")
+        },     
         hide_index=True
     )
     st.write(f"**Mostrando {len(df)} de un total de {len(data)} palabras clave**")
