@@ -9,6 +9,13 @@ from typing import List, Dict
 from collections import Counter
 from fastapi.middleware.cors import CORSMiddleware
 from prophet import Prophet
+from dotenv import load_dotenv
+load_dotenv()
+
+import os
+CLIENT_ID = os.getenv("CLIENT_ID")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+
 
 app = FastAPI(title="API de Análisis de Tendencias de Mercado Libre")
 app.add_middleware(
@@ -85,6 +92,51 @@ def init_db():
     conn.commit()
     conn.close()
 
+
+# Leer refresh_token desde archivo
+def load_refresh_token():
+    try:
+        with open("refresh_token.txt", "r") as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        raise Exception("⚠️ No se encontró 'refresh_token.txt'. Ingresalo manualmente para iniciar.")
+
+# Guardar nuevo refresh_token
+def save_refresh_token(token):
+    with open("refresh_token.txt", "w") as f:
+        f.write(token)
+
+def refresh_access_token(client_id, client_secret, refresh_token):
+    url = "https://api.mercadolibre.com/oauth/token"
+    headers = {
+        "accept": "application/json",
+        "content-type": "application/x-www-form-urlencoded"
+    }
+    data = {
+        "grant_type": "refresh_token",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "refresh_token": refresh_token
+    }
+    response = requests.post(url, headers=headers, data=data)
+    response.raise_for_status()
+    return response.json()
+
+def fetch_mercado_libre_trends(access_token):
+    url = "https://api.mercadolibre.com/trends/MLA/MLA1246"
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    data = response.json()
+
+    os.makedirs("trend", exist_ok=True)
+    with open('trend/data.json', 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    return data
+
 # Función para categorizar una keyword (sin cambios)
 def categorize_keyword(keyword):
     keyword_lower = keyword.lower()
@@ -96,40 +148,54 @@ def categorize_keyword(keyword):
 
 # Función para capturar y guardar datos (MODIFICADA)
 def capture_and_save_data():
-    # 1. Leer datos desde un archivo JSON en la carpeta /trend
-    try:
-        with open('trend/data.json', 'r', encoding='utf-8') as f:
-            selected_data = json.load(f)
-    except FileNotFoundError:
-        raise Exception("El archivo 'trend/data.json' no se encontró")
-    except json.JSONDecodeError:
-        raise Exception("Error al decodificar el archivo JSON")
+    print(f"✅ CLIENT_ID usado: {CLIENT_ID[:4]}****")
+    print(f"✅ CLIENT_SECRET usado: {CLIENT_SECRET[:4]}****")
+    print(f"✅ refresh_token usado: {load_refresh_token()[:4]}****")
 
-    # 3 y 5. Usar una fecha específica (por ahora fija, con today como comentario para futuro)
-    # current_date = "2025-04-02"  # Fecha específica que tú indiques
-    current_date = datetime.now().strftime("%Y-%m-%d")  # Usar fecha de hoy
+    # 1. Cargar el refresh_token actual
+    try:
+        refresh_token = load_refresh_token()
+    except Exception as e:
+        raise Exception(f"Error cargando refresh_token: {e}")
+
+    # 2. Refrescar access_token
+    try:
+        token_data = refresh_access_token(CLIENT_ID, CLIENT_SECRET, refresh_token)
+        access_token = token_data["access_token"]
+        new_refresh_token = token_data["refresh_token"]
+        save_refresh_token(new_refresh_token)
+    except requests.RequestException as e:
+        raise Exception(f"Error al refrescar el token: {str(e)}")
+
+    # 3. Descargar datos desde Mercado Libre y guardarlos
+    try:
+        selected_data = fetch_mercado_libre_trends(access_token)
+    except requests.RequestException as e:
+        raise Exception(f"Error al obtener tendencias de Mercado Libre: {str(e)}")
+
+    # 4. Insertar en base de datos con la fecha de hoy
+    current_date = datetime.now().strftime("%Y-%m-%d")
     current_time = datetime.now().strftime("%H:%M:%S")
-    
-    # 2 y 4. Quitamos el random.shuffle y la selección aleatoria de fechas
+
     conn = sqlite3.connect('trends.db')
     cursor = conn.cursor()
-    
+
     try:
         for item in selected_data:
             keyword = item["keyword"]
             category = categorize_keyword(keyword)
-            
+
             cursor.execute(
                 "INSERT INTO keywords_data (keyword, category, capture_date, capture_time) VALUES (?, ?, ?, ?)",
                 (keyword, category, current_date, current_time)
             )
-            
+
             cursor.execute(
                 "SELECT count, last_date, last_time FROM keyword_rankings WHERE keyword = ?",
                 (keyword,)
             )
             result = cursor.fetchone()
-            
+
             if result:
                 count, last_date, last_time = result
                 cursor.execute(
@@ -141,13 +207,13 @@ def capture_and_save_data():
                     "INSERT INTO keyword_rankings (keyword, count, last_date, last_time) VALUES (?, ?, ?, ?)",
                     (keyword, 1, current_date, current_time)
                 )
-            
+
             cursor.execute(
                 "SELECT count, last_date, last_time FROM category_rankings WHERE category = ?",
                 (category,)
             )
             result = cursor.fetchone()
-            
+
             if result:
                 count, last_date, last_time = result
                 cursor.execute(
@@ -159,14 +225,14 @@ def capture_and_save_data():
                     "INSERT INTO category_rankings (category, count, last_date, last_time) VALUES (?, ?, ?, ?)",
                     (category, 1, current_date, current_time)
                 )
-        
+
         conn.commit()
     except sqlite3.Error as e:
         conn.rollback()
         raise Exception(f"Error en la base de datos: {str(e)}")
     finally:
         conn.close()
-    
+
     return {
         "status": "success",
         "message": f"Datos capturados y guardados correctamente en la fecha {current_date} a las {current_time}",
