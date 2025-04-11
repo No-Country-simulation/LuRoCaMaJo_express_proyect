@@ -45,9 +45,9 @@ CLIENT_ID=tu_client_id
 CLIENT_SECRET=tu_client_secret
 ```
 Y Crea un archivo `refresh_token.txt` en la raíz del proyecto con:
-
+```
 tu_refresh_token
-
+```
 > ⚠️ **Nunca compartas estos archivos ni lo subas al repositorio.**
 
 También asegurate de que tu archivo `.gitignore` contenga:
